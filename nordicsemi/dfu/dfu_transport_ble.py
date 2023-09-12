@@ -138,7 +138,7 @@ class DFUAdapter(BLEDriverObserver, BLEAdapterObserver):
         self.adapter.driver.observer_unregister(self)
         self.adapter.driver.close()
 
-    def connect(self, target_device_name, target_device_addr):
+    def connect(self, target_device_name, target_device_addr, forbid_mac_increment):
         """ Connect to Bootloader or Application with Buttonless Service.
 
         Args:
@@ -159,9 +159,9 @@ class DFUAdapter(BLEDriverObserver, BLEAdapterObserver):
 
         # Check if connected peer has Buttonless service.
         if self.adapter.db_conns[self.conn_handle].get_cccd_handle(DFUAdapter.BLE_DFU_BUTTONLESS_CHAR_UUID):
-            self.jump_from_buttonless_mode_to_bootloader(DFUAdapter.BLE_DFU_BUTTONLESS_CHAR_UUID)
+            self.jump_from_buttonless_mode_to_bootloader(DFUAdapter.BLE_DFU_BUTTONLESS_CHAR_UUID, forbid_mac_increment)
         elif self.adapter.db_conns[self.conn_handle].get_cccd_handle(DFUAdapter.BLE_DFU_BUTTONLESS_BONDED_CHAR_UUID):
-            self.jump_from_buttonless_mode_to_bootloader(DFUAdapter.BLE_DFU_BUTTONLESS_BONDED_CHAR_UUID)
+            self.jump_from_buttonless_mode_to_bootloader(DFUAdapter.BLE_DFU_BUTTONLESS_BONDED_CHAR_UUID, forbid_mac_increment)
 
         if self.bonded:
             # For combined Updates with bonds enabled, re-encryption is needed
@@ -185,7 +185,7 @@ class DFUAdapter(BLEDriverObserver, BLEAdapterObserver):
         self.adapter.enable_notification(conn_handle=self.conn_handle, uuid=DFUAdapter.CP_UUID)
         return self.target_device_name, self.target_device_addr
 
-    def jump_from_buttonless_mode_to_bootloader(self, buttonless_uuid):
+    def jump_from_buttonless_mode_to_bootloader(self, buttonless_uuid, forbid_mac_increment):
         """ Function for going to bootloader mode from application with
          buttonless service. It supports both bonded and unbonded
          buttonless characteristics.
@@ -198,9 +198,12 @@ class DFUAdapter(BLEDriverObserver, BLEAdapterObserver):
             logger.info("Bonded Buttonless characteristic discovered -> Bond")
             self.bond()
         else:
-            logger.info("Un-bonded Buttonless characteristic discovered -> Increment target device addr")
-            self.target_device_addr = "{:X}".format(int(self.target_device_addr, 16) + 1)
-            self.target_device_addr_type.addr[-1] += 1
+            if forbid_mac_increment:
+                logger.info("Un-bonded Buttonless characteristic discovered -> Target device addr increment is forbidden")
+            else:
+                logger.info("Un-bonded Buttonless characteristic discovered -> Increment target device addr")
+                self.target_device_addr = "{:X}".format(int(self.target_device_addr, 16) + 1)
+                self.target_device_addr_type.addr[-1] += 1
 
         # Enable indication for Buttonless DFU Service
         self.adapter.enable_indication(self.conn_handle, buttonless_uuid)
@@ -448,7 +451,8 @@ class DfuTransportBle(DfuTransport):
                  target_device_name=None,
                  target_device_addr=None,
                  baud_rate=1000000,
-                 prn=0):
+                 prn=0,
+                 forbid_mac_increment=False):
         super().__init__()
         DFUAdapter.LOCAL_ATT_MTU = att_mtu
         self.baud_rate          = baud_rate
@@ -462,6 +466,8 @@ class DfuTransportBle(DfuTransport):
         self.bonded             = False
         self.keyset             = None
 
+        self.forbid_mac_increment             = forbid_mac_increment
+
     def open(self):
         if self.dfu_adapter:
             raise IllegalStateException('DFU Adapter is already open')
@@ -474,7 +480,8 @@ class DfuTransportBle(DfuTransport):
         self.dfu_adapter.open()
         self.target_device_name, self.target_device_addr = self.dfu_adapter.connect(
                                                         target_device_name = self.target_device_name,
-                                                        target_device_addr = self.target_device_addr)
+                                                        target_device_addr = self.target_device_addr,
+                                                        forbid_mac_increment = self.forbid_mac_increment)
         self.__set_prn()
 
     def close(self):

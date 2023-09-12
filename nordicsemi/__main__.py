@@ -1147,7 +1147,11 @@ def port_is_jlink(port):
                    'lower mtu.',
               type=click.IntRange(23, 247, clamp=True),
               default=247)
-def ble(package, conn_ic_id, port, connect_delay, name, address, jlink_snr, flash_connectivity, att_mtu):
+@click.option('-fmi', '--forbid_mac_increment',
+              help='Forbid incrementing MAC address. Default: disabled.',
+              type=click.BOOL,
+              is_flag=True)
+def ble(package, conn_ic_id, port, connect_delay, name, address, jlink_snr, flash_connectivity, att_mtu, forbid_mac_increment):
     """
     Perform a Device Firmware Update on a device with a bootloader that supports BLE DFU.
     This requires a second nRF device, connected to this computer, with connectivity firmware
@@ -1204,7 +1208,8 @@ def ble(package, conn_ic_id, port, connect_delay, name, address, jlink_snr, flas
     ble_backend = DfuTransportBle(serial_port=str(port),
                                   att_mtu=att_mtu,
                                   target_device_name=str(name),
-                                  target_device_addr=str(address))
+                                  target_device_addr=str(address),
+                                  forbid_mac_increment=forbid_mac_increment)
     ble_backend.register_events_callback(DfuEvent.PROGRESS_EVENT, update_progress)
     dfu = Dfu(zip_file_path=package, dfu_transport=ble_backend, connect_delay=connect_delay)
 
