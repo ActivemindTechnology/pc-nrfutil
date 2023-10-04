@@ -3,6 +3,8 @@
 
 # Virtualenv
 venv/
+venv2/
+venv3/
 
 # Build
 build/
