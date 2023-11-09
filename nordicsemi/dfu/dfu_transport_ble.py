@@ -54,7 +54,7 @@ from pc_ble_driver_py.ble_driver    import ATT_MTU_DEFAULT
 from pc_ble_driver_py.ble_adapter   import BLEAdapter, BLEAdapterObserver, EvtSync
 
 logger  = logging.getLogger(__name__)
-#logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.DEBUG)
 
 from pc_ble_driver_py import config
 global nrf_sd_ble_api_ver
@@ -222,7 +222,9 @@ class DFUAdapter(BLEDriverObserver, BLEAdapterObserver):
             True if connected, else False.
 
         """
-        self.conn_handle = self.evt_sync.wait('connected')
+        conn_wait_timeout = 10
+        self.conn_handle = self.evt_sync.wait('connected', timeout=conn_wait_timeout)
+        logger.debug("conn_handle: {}".format(self.conn_handle))
         if self.conn_handle is not None:
             retries = DFUAdapter.CONNECTION_ATTEMPTS
             while retries:
@@ -243,6 +245,8 @@ class DFUAdapter(BLEDriverObserver, BLEAdapterObserver):
 
             logger.info("Successfully Connected")
             return
+        else:
+            logger.error("Connection Failure - Connection handle is None after {} s wait".format(conn_wait_timeout))
 
         self.adapter.driver.ble_gap_scan_stop()
         raise Exception("Connection Failure - Device not found!")
@@ -365,14 +369,14 @@ class DFUAdapter(BLEDriverObserver, BLEAdapterObserver):
 
         dev_name        = "".join(chr(e) for e in dev_name_list)
         address_string  = "".join("{0:02X}".format(b) for b in peer_addr.addr)
-        logger.info('Received advertisement report, address: 0x{}, device_name: {}'.format(address_string, dev_name))
+        logger.info('Received advertisement report, address: 0x{}, rssi: {}, device_name: {}'.format(address_string, rssi, dev_name))
 
         if (dev_name == self.target_device_name) or (address_string == self.target_device_addr):
             self.conn_params = BLEGapConnParams(min_conn_interval_ms = 7.5,
                                                 max_conn_interval_ms = 30,
                                                 conn_sup_timeout_ms  = 4000,
                                                 slave_latency        = 0)
-            logger.info('BLE: Found target advertiser, address: 0x{}, name: {}'.format(address_string, dev_name))
+            logger.info('BLE: Found target advertiser, address: 0x{}, rssi: {}, name: {}'.format(address_string, rssi, dev_name))
             logger.info('BLE: Connecting to 0x{}'.format(address_string))
             self.adapter.connect(address = peer_addr, conn_params = self.conn_params)
             # store the address for subsequent connections
